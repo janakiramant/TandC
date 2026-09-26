@@ -119,16 +119,28 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <Header 
-        filename={activeDoc?.filename} 
-        totalPages={activeDoc?.total_pages} 
+      <Header
+        filename={activeDoc?.filename}
+        totalPages={activeDoc?.total_pages}
       />
-      
+
       <DisclaimerBanner />
 
-      <main className="three-panel-layout">
+      {/* Screen-reader live region for status messages */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        id="app-status-live-region"
+      >
+        {isProcessing ? 'Parsing and analyzing PDF document, please wait…' : ''}
+        {errorMessage ? `Error: ${errorMessage}` : ''}
+      </div>
+
+      <main id="main-content" className="three-panel-layout" aria-label="Document analysis workspace">
         {/* Left Panel: Upload + Chat */}
-        <section className="panel panel-left">
+        <section className="panel panel-left" aria-label="Document upload and chat">
           <UploadZone
             onFileSelected={handleFileSelected}
             isProcessing={isProcessing}
@@ -147,7 +159,7 @@ export const App: React.FC = () => {
         </section>
 
         {/* Middle Panel: AI Analysis */}
-        <section className="panel panel-middle">
+        <section className="panel panel-middle" aria-label="AI analysis results">
           <AnalysisDashboard
             analysis={activeDoc?.analysis || null}
             selectedFindingId={selectedFindingId}
@@ -157,7 +169,7 @@ export const App: React.FC = () => {
         </section>
 
         {/* Right Panel: PDF Viewer */}
-        <section className="panel panel-right">
+        <section className="panel panel-right" aria-label="PDF document viewer">
           <PdfViewer
             pdfUrl={pdfUrl}
             targetPage={targetPage}

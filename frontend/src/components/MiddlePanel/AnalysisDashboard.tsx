@@ -105,52 +105,67 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({
 
       {/* Filter Tabs & Search Controls */}
       <div className="controls-bar">
-        <div className="category-tabs">
+        <div className="category-tabs" role="tablist" aria-label="Filter findings by category">
           <button
+            role="tab"
+            aria-selected={activeTab === 'all'}
             className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
             All ({counts.all})
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'favorable'}
             className={`tab-btn tab-favorable ${activeTab === 'favorable' ? 'active' : ''}`}
             onClick={() => setActiveTab('favorable')}
           >
-            <CheckCircle2 size={13} />
+            <CheckCircle2 size={13} aria-hidden="true" />
             Favorable ({counts.favorable})
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'risk'}
             className={`tab-btn tab-risk ${activeTab === 'risk' ? 'active' : ''}`}
             onClick={() => setActiveTab('risk')}
           >
-            <ShieldAlert size={13} />
+            <ShieldAlert size={13} aria-hidden="true" />
             Concerns ({counts.risk})
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'important'}
             className={`tab-btn tab-important ${activeTab === 'important' ? 'active' : ''}`}
             onClick={() => setActiveTab('important')}
           >
-            <FileText size={13} />
+            <FileText size={13} aria-hidden="true" />
             Clauses ({counts.important})
           </button>
         </div>
 
         <div className="search-box">
-          <Search size={14} className="search-icon" />
+          <Search size={14} className="search-icon" aria-hidden="true" />
+          <label htmlFor="findings-search" className="sr-only">Search findings</label>
           <input
-            type="text"
+            id="findings-search"
+            type="search"
             placeholder="Search findings..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Search findings by keyword"
           />
         </div>
       </div>
 
       {/* Main Single Scroll Findings List */}
-      <div className="findings-scroll-container">
+      <div
+        className="findings-scroll-container"
+        aria-label={`Findings list: ${filteredFindings.length} result${filteredFindings.length !== 1 ? 's' : ''}`}
+        aria-live="polite"
+      >
         {filteredFindings.length === 0 ? (
-          <div className="no-findings">
-            <Filter size={24} />
+          <div className="no-findings" role="status">
+            <Filter size={24} aria-hidden="true" />
             <p>No findings matching the selected filter.</p>
           </div>
         ) : (

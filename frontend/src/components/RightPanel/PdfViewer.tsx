@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { 
@@ -37,23 +37,30 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const isProgrammaticScrollRef = useRef<boolean>(false);
   const programmaticTimeoutRef = useRef<any>(null);
   const lastTargetPageRef = useRef<number | null>(null);
+  const targetPageRef = useRef<number>(targetPage);
+
+  useEffect(() => {
+    targetPageRef.current = targetPage;
+  }, [targetPage]);
 
   // 1. Fetch & Load PDF Document
   useEffect(() => {
     if (!pdfUrl) {
-      setPdfDoc(null);
-      setNumPages(0);
-      setCurrentPage(1);
-      setLoadError(null);
       lastTargetPageRef.current = null;
-      return;
+      const timer = setTimeout(() => {
+        setPdfDoc(null);
+        setNumPages(0);
+        setCurrentPage(1);
+        setLoadError(null);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
-    setLoading(true);
-    setLoadError(null);
 
     const loadPdf = async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         const response = await fetch(pdfUrl);
         if (!response.ok) {
@@ -70,7 +77,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
         setPdfDoc(doc);
         setNumPages(doc.numPages);
-        setCurrentPage(targetPage || 1);
+        setCurrentPage(targetPageRef.current || 1);
         setLoading(false);
       } catch (err: any) {
         console.error('Error loading PDF in viewer:', err);
@@ -115,7 +122,40 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
   }, [targetPage, numPages]);
 
-  // 3. Render all page canvases (Only when document, page count, or scale changes)
+  // 3. Highlight target text on canvas
+  const highlightTextOnCanvas = useCallback(async (
+    page: pdfjsLib.PDFPageProxy,
+    viewport: pdfjsLib.PageViewport,
+    context: CanvasRenderingContext2D,
+    searchTerm: string
+  ) => {
+    if (!searchTerm || !searchTerm.trim()) return;
+    try {
+      const textContent = await page.getTextContent();
+      const termLower = searchTerm.toLowerCase();
+
+      textContent.items.forEach((item: any) => {
+        if (!item.str) return;
+        const itemStrLower = item.str.toLowerCase();
+        if (itemStrLower.includes(termLower) || termLower.includes(itemStrLower)) {
+          const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
+
+          context.save();
+          context.fillStyle = 'rgba(254, 240, 138, 0.55)'; // subtle translucent yellow
+          context.strokeStyle = 'rgba(234, 179, 8, 0.85)';
+          context.lineWidth = 1.5;
+          context.fillRect(tx[4], tx[5] - fontHeight, item.width * viewport.scale, fontHeight * 1.2);
+          context.strokeRect(tx[4], tx[5] - fontHeight, item.width * viewport.scale, fontHeight * 1.2);
+          context.restore();
+        }
+      });
+    } catch {
+      // ignore highlight error
+    }
+  }, []);
+
+  // 4. Render all page canvases (When document, page count, scale, or highlight changes)
   useEffect(() => {
     if (!pdfDoc || numPages === 0) return;
 
@@ -127,7 +167,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       if (renderTasksRef.current[pageNum]) {
         try {
           renderTasksRef.current[pageNum].cancel();
-        } catch (e) {
+        } catch {
           // ignore cancel error
         }
       }
@@ -168,7 +208,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         await renderTask.promise;
 
         if (isMounted && highlightText && context) {
-          _highlightTextOnCanvas(page, viewport, context, highlightText);
+          highlightTextOnCanvas(page, viewport, context, highlightText);
         }
       } catch (err: any) {
         if (err.name !== 'RenderingCancelledException') {
@@ -185,40 +225,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [pdfDoc, numPages, scale]);
-
-  // 4. Highlight target text on canvas
-  const _highlightTextOnCanvas = async (
-    page: pdfjsLib.PDFPageProxy,
-    viewport: pdfjsLib.PageViewport,
-    context: CanvasRenderingContext2D,
-    searchTerm: string
-  ) => {
-    if (!searchTerm || !searchTerm.trim()) return;
-    try {
-      const textContent = await page.getTextContent();
-      const termLower = searchTerm.toLowerCase();
-
-      textContent.items.forEach((item: any) => {
-        if (!item.str) return;
-        const itemStrLower = item.str.toLowerCase();
-        if (itemStrLower.includes(termLower) || termLower.includes(itemStrLower)) {
-          const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-          const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
-
-          context.save();
-          context.fillStyle = 'rgba(254, 240, 138, 0.55)'; // subtle translucent yellow
-          context.strokeStyle = 'rgba(234, 179, 8, 0.85)';
-          context.lineWidth = 1.5;
-          context.fillRect(tx[4], tx[5] - fontHeight, item.width * viewport.scale, fontHeight * 1.2);
-          context.strokeRect(tx[4], tx[5] - fontHeight, item.width * viewport.scale, fontHeight * 1.2);
-          context.restore();
-        }
-      });
-    } catch (e) {
-      console.warn('Highlight canvas exception:', e);
-    }
-  };
+  }, [pdfDoc, numPages, scale, highlightText, highlightTextOnCanvas]);
 
   // 5. User Manual Scroll Listener (Updates toolbar page counter without feedback loop)
   const handleScroll = () => {
@@ -309,53 +316,54 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   return (
     <div className="pdf-viewer-container">
       {/* SaaS Toolbar */}
-      <div className="pdf-toolbar">
+      <div className="pdf-toolbar" role="toolbar" aria-label="PDF navigation and zoom controls">
         <div className="nav-controls">
           <button
             onClick={handlePrevPage}
             disabled={currentPage <= 1}
             className="btn-toolbar"
-            title="Previous Page"
+            aria-label="Go to previous page"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={16} aria-hidden="true" />
           </button>
-          <span className="page-indicator">
+          <span className="page-indicator" aria-live="polite" aria-atomic="true">
             Page <strong className="current-page-num">{currentPage}</strong> of {numPages || 1}
           </span>
           <button
             onClick={handleNextPage}
             disabled={currentPage >= numPages}
             className="btn-toolbar"
-            title="Next Page"
+            aria-label="Go to next page"
           >
-            <ChevronRight size={16} />
+            <ChevronRight size={16} aria-hidden="true" />
           </button>
         </div>
 
         <div className="zoom-controls">
-          <button onClick={handleZoomOut} className="btn-toolbar" title="Zoom Out (-15%)">
-            <ZoomOut size={16} />
+          <button onClick={handleZoomOut} className="btn-toolbar" aria-label={`Zoom out (currently ${Math.round(scale * 100)}%)`}>
+            <ZoomOut size={16} aria-hidden="true" />
           </button>
-          <span className="zoom-level">{Math.round(scale * 100)}%</span>
-          <button onClick={handleZoomIn} className="btn-toolbar" title="Zoom In (+15%)">
-            <ZoomIn size={16} />
+          <span className="zoom-level" aria-live="polite">{Math.round(scale * 100)}%</span>
+          <button onClick={handleZoomIn} className="btn-toolbar" aria-label={`Zoom in (currently ${Math.round(scale * 100)}%)`}>
+            <ZoomIn size={16} aria-hidden="true" />
           </button>
-          <button onClick={handleResetZoom} className="btn-toolbar btn-reset-zoom" title="Reset Zoom (115%)">
-            <Maximize2 size={15} />
+          <button onClick={handleResetZoom} className="btn-toolbar btn-reset-zoom" aria-label="Reset zoom to default (115%)">
+            <Maximize2 size={15} aria-hidden="true" />
             <span>Fit</span>
           </button>
         </div>
       </div>
 
       {/* Vertical Scroll PDF Pages Container */}
-      <div 
-        ref={containerRef} 
+      <div
+        ref={containerRef}
         onScroll={handleScroll}
         className="pdf-pages-scroll-container"
+        aria-label="PDF document pages"
       >
         {loading && (
-          <div className="pdf-loading-overlay">
-            <Loader2 size={32} className="spinner-icon" />
+          <div className="pdf-loading-overlay" role="status" aria-busy="true" aria-live="polite">
+            <Loader2 size={32} className="spinner-icon" aria-hidden="true" />
             <span>Loading document pages...</span>
           </div>
         )}
@@ -377,16 +385,16 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             {Array.from({ length: numPages }, (_, idx) => idx + 1).map((pageNum) => {
               const isTarget = pageNum === targetPage;
               return (
-                <div
+            <div
                   key={pageNum}
                   id={`pdf-page-${pageNum}`}
                   className={`pdf-page-wrapper ${isTarget ? 'target-highlighted-page' : ''}`}
                 >
-                  <div className="page-header-ribbon">
+                  <div className="page-header-ribbon" aria-hidden="true">
                     <span className="page-num-label">Page {pageNum}</span>
                     {isTarget && (
                       <span className="target-finding-badge">
-                        <Bookmark size={12} />
+                        <Bookmark size={12} aria-hidden="true" />
                         Referenced Finding Location
                       </span>
                     )}
@@ -395,6 +403,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     <canvas
                       ref={(el) => { canvasRefs.current[pageNum] = el; }}
                       className="pdf-page-canvas"
+                      role="img"
+                      aria-label={`PDF page ${pageNum} of ${numPages}`}
                     />
                   </div>
                 </div>

@@ -60,9 +60,17 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
     }
   };
 
+  /** Allow keyboard users to activate the drop zone with Enter/Space */
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isProcessing && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      triggerFileBrowser();
+    }
+  };
+
   return (
     <div className="upload-section-card">
-      <div className="section-title">
+      <div className="section-title" aria-hidden="true">
         <span>Document Upload</span>
       </div>
 
@@ -73,12 +81,18 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
         accept="application/pdf,.pdf"
         className="hidden-file-input"
         style={{ display: 'none' }}
+        aria-label="Upload PDF document"
+        tabIndex={-1}
       />
 
       {activeDoc ? (
-        <div className="active-doc-banner">
+        <div
+          className="active-doc-banner"
+          role="status"
+          aria-label={`Document loaded: ${activeDoc.filename}, ${activeDoc.total_pages} pages`}
+        >
           <div className="doc-info-row">
-            <FileCheck className="icon-success" size={20} />
+            <FileCheck className="icon-success" size={20} aria-hidden="true" />
             <div className="doc-details">
               <span className="doc-filename">{activeDoc.filename}</span>
               <span className="doc-meta">
@@ -89,9 +103,9 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
           <button
             onClick={onClearDocument}
             className="btn-reset-doc"
-            title="Clear and upload new document"
+            aria-label="Clear document and upload a new one"
           >
-            <RefreshCw size={14} /> Clear / Reset
+            <RefreshCw size={14} aria-hidden="true" /> Clear / Reset
           </button>
         </div>
       ) : (
@@ -101,28 +115,37 @@ export const UploadZone: React.FC<UploadZoneProps> = ({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={!isProcessing ? triggerFileBrowser : undefined}
+          onKeyDown={handleKeyDown}
+          role="button"
+          tabIndex={isProcessing ? -1 : 0}
+          aria-label="Upload PDF: drag and drop a file here or press Enter to browse"
+          aria-disabled={isProcessing}
         >
           {isProcessing ? (
-            <div className="upload-state-loading">
-              <Loader2 size={32} className="spinner-icon" />
-              <p className="loading-text">Parsing & Analyzing PDF...</p>
-              <span className="loading-sub">Extracting text & identifying key clauses</span>
+            <div className="upload-state-loading" aria-live="polite" aria-busy="true">
+              <Loader2 size={32} className="spinner-icon" aria-hidden="true" />
+              <p className="loading-text">Parsing &amp; Analyzing PDF...</p>
+              <span className="loading-sub">Extracting text &amp; identifying key clauses</span>
             </div>
           ) : (
             <div className="upload-state-idle">
-              <UploadCloud size={36} className="upload-icon" />
+              <UploadCloud size={36} className="upload-icon" aria-hidden="true" />
               <p className="upload-prompt">
-                Drag & drop legal PDF here or <span className="browse-link">Browse files</span>
+                Drag &amp; drop legal PDF here or <span className="browse-link">Browse files</span>
               </p>
-              <span className="upload-hint">Supports text-based legal contracts, agreements, & terms</span>
+              <span className="upload-hint">Supports text-based legal contracts, agreements, &amp; terms</span>
             </div>
           )}
         </div>
       )}
 
       {errorMessage && (
-        <div className="upload-error-alert">
-          <AlertCircle size={16} />
+        <div
+          className="upload-error-alert"
+          role="alert"
+          aria-live="assertive"
+        >
+          <AlertCircle size={16} aria-hidden="true" />
           <span>{errorMessage}</span>
         </div>
       )}

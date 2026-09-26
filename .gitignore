@@ -57,8 +57,10 @@ Thumbs.db
 *.sw?
 
 # ================================
-# Sample / test documents
+# Sample / test documents & Media
 # ================================
 # Uncomment if you don't want test docs in git:
 # test_docs/
 # backend/sample_docs/
+*.mp4
+demo_tandc.mp4

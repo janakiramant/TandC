@@ -12,6 +12,35 @@ from app.prompts import SYSTEM_ANALYSIS_PROMPT, SYSTEM_CHAT_PROMPT
 
 logger = logging.getLogger("legal_pdf_analyzer.llm")
 
+# ---------------------------------------------------------------------------
+# Pre-compiled regex patterns (module-level – compiled once for efficiency)
+# ---------------------------------------------------------------------------
+_RISK_PATTERN = re.compile(
+    r"(notice period|terminate|termination|penalty|damages|indemnification|"
+    r"non-compete|automatic renewal|renew automatically|late payment|"
+    r"interest|liability cap|unilateral)",
+    re.IGNORECASE,
+)
+_FAVORABLE_PATTERN = re.compile(
+    r"(intellectual property|ownership|warrant|warrants|confidential|"
+    r"reimburse|grace period|cure period|mutually|right to inspect|"
+    r"non-exclusive license)",
+    re.IGNORECASE,
+)
+_IMPORTANT_PATTERN = re.compile(
+    r"(governing law|jurisdiction|dispute resolution|arbitration|"
+    r"payment terms|compensation|fee|fees|confidentiality|"
+    r"term and termination|scope of work)",
+    re.IGNORECASE,
+)
+_CLAUSE_PATTERNS = [
+    ("risk", _RISK_PATTERN, "Concern / Risk Item"),
+    ("favorable", _FAVORABLE_PATTERN, "Favorable Provision"),
+    ("important", _IMPORTANT_PATTERN, "Important Clause"),
+]
+_WORD_PATTERN = re.compile(r"\w+")
+_SENTENCE_SPLIT = re.compile(r"[\.\n]+")
+
 
 async def analyze_document_with_llm(pdf: ProcessedPDF) -> DocumentAnalysis:
     """Analyzes document pages with LLM (Gemini or OpenAI) or fallback rule engine."""
@@ -89,9 +118,13 @@ async def answer_chat_with_llm(pdf: ProcessedPDF, question: str) -> ChatResponse
 async def _call_gemini_analysis(pdf: ProcessedPDF) -> Optional[DocumentAnalysis]:
     full_text = pdf.get_full_text()
     prompt = f"{SYSTEM_ANALYSIS_PROMPT}\n\nDOCUMENT CONTENT:\n{full_text}"
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
+
+    # API key passed via header (not URL query param) to avoid logging/proxy exposure
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": settings.GEMINI_API_KEY,
+    }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -102,7 +135,7 @@ async def _call_gemini_analysis(pdf: ProcessedPDF) -> Optional[DocumentAnalysis]
     async with httpx.AsyncClient(timeout=45.0) as client:
         resp = await client.post(url, json=payload, headers=headers)
         if resp.status_code != 200:
-            logger.error(f"Gemini API error {resp.status_code}: {resp.text}")
+            logger.error(f"Gemini API error {resp.status_code}")
             return None
 
         data = resp.json()
@@ -141,8 +174,12 @@ async def _call_gemini_chat(pdf: ProcessedPDF, question: str) -> Optional[ChatRe
 
     prompt = f"{SYSTEM_CHAT_PROMPT}\n\nDOCUMENT EXCERPTS:\n{context_text}\n\nUSER QUESTION: {question}"
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
+    # API key passed via header (not URL query param)
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": settings.GEMINI_API_KEY,
+    }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -280,37 +317,25 @@ def _local_rule_based_analysis(pdf: ProcessedPDF) -> DocumentAnalysis:
     """Intelligent fallback analysis when no API key is set."""
     findings: List[Finding] = []
 
-    # Legal clause patterns
-    patterns = [
-        # Risk / Concerns
-        ("risk", r"(notice period|terminate|termination|penalty|damages|indemnification|non-compete|automatic renewal|renew automatically|late payment|interest|liability cap|unilateral)", "Concern / Risk Item"),
-        # Favorable
-        ("favorable", r"(intellectual property|ownership|warrant|warrants|confidential|reimburse|grace period|cure period|mutually|right to inspect|non-exclusive license)", "Favorable Provision"),
-        # Important
-        ("important", r"(governing law|jurisdiction|dispute resolution|arbitration|payment terms|compensation|fee|fees|confidentiality|term and termination|scope of work)", "Important Clause")
-    ]
-
     finding_counter = 1
-    seen_titles = set()
+    seen_titles: set = set()
 
     for p in pdf.pages:
         lines = [line.strip() for line in p.text.split('\n') if len(line.strip()) > 10]
-        
+
         for line in lines:
-            for category, regex, default_label in patterns:
-                match = re.search(regex, line, re.IGNORECASE)
+            for category, compiled_re, default_label in _CLAUSE_PATTERNS:
+                match = compiled_re.search(line)
                 if match:
                     matched_term = match.group(0).title()
                     sec_ref = p.sections[0] if p.sections else None
-                    
+
                     title = f"{matched_term} Provision"
                     if title in seen_titles:
                         continue
                     seen_titles.add(title)
 
-                    # Extract snippet context around line
                     snippet = line[:200]
-                    
                     summary_desc = _generate_clause_summary(category, matched_term, line)
 
                     findings.append(
@@ -383,11 +408,11 @@ def _local_rule_based_chat(pdf: ProcessedPDF, question: str) -> ChatResponse:
         "mentioned", "document", "agreement", "contract", "clause", "section", "stated", "specified", "provided",
         "according", "about", "this", "that", "in", "on", "at", "to", "from", "by", "of"
     }
-    q_words = [w.lower() for w in re.findall(r'\w+', question) if len(w) > 2 and w.lower() not in stop_words]
+    q_words = [w.lower() for w in _WORD_PATTERN.findall(question) if len(w) > 2 and w.lower() not in stop_words]
 
     if not q_words:
         return ChatResponse(
-            answer="Information requested is not specified or found in the uploaded document.",
+            answer="The document does not provide enough information to answer this question.",
             sources=[],
             is_grounded=False
         )
@@ -395,27 +420,31 @@ def _local_rule_based_chat(pdf: ProcessedPDF, question: str) -> ChatResponse:
     matching_snippets = []
 
     for p in pdf.pages:
-        sentences = re.split(r'[\.\n]+', p.text)
+        sentences = _SENTENCE_SPLIT.split(p.text)
         for s in sentences:
             s_clean = s.strip()
             if not s_clean or len(s_clean) < 12:
                 continue
             s_lower = s_clean.lower()
+            s_words = set(_WORD_PATTERN.findall(s_lower))
 
-            matches = sum(1 for w in q_words if w in s_lower)
+            matches = sum(1 for w in q_words if w in s_words)
             if matches > 0:
                 sec = p.sections[0] if p.sections else f"Page {p.page_number}"
                 matching_snippets.append((matches, p.page_number, sec, s_clean))
 
-    if not matching_snippets:
+    min_required_matches = 2 if len(q_words) >= 3 else 1
+    confident_matches = [m for m in matching_snippets if m[0] >= min_required_matches]
+
+    if not confident_matches:
         return ChatResponse(
-            answer="The requested information was not found in the uploaded document.",
+            answer="The document does not provide enough information to answer this question.",
             sources=[],
             is_grounded=False
         )
 
-    matching_snippets.sort(key=lambda x: x[0], reverse=True)
-    top_matches = matching_snippets[:3]
+    confident_matches.sort(key=lambda x: x[0], reverse=True)
+    top_matches = confident_matches[:3]
 
     answer_parts = []
     sources = []
@@ -442,7 +471,7 @@ def _local_rule_based_chat(pdf: ProcessedPDF, question: str) -> ChatResponse:
 
 
 def _search_relevant_pages(pdf: ProcessedPDF, question: str) -> List[PageData]:
-    q_words = [w.lower() for w in re.findall(r'\w+', question) if len(w) > 3]
+    q_words = [w.lower() for w in _WORD_PATTERN.findall(question) if len(w) > 3]
     scored_pages = []
 
     for p in pdf.pages:

@@ -46,40 +46,47 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
   ];
 
   return (
-    <div className="chat-section-card">
+    <div className="chat-section-card" aria-label="Document Chat Q&A">
       <div className="chat-header">
         <div className="chat-title-group">
-          <Bot size={18} className="chat-bot-icon" />
-          <span>Document Chat Q&A</span>
+          <Bot size={18} className="chat-bot-icon" aria-hidden="true" />
+          <span id="chat-section-title">Document Chat Q&amp;A</span>
         </div>
         {messages.length > 0 && (
-          <button 
+          <button
             onClick={onClearChat}
-            className="btn-clear-chat" 
-            title="Clear chat history"
+            className="btn-clear-chat"
+            aria-label="Clear chat history"
           >
-            <Trash2 size={14} /> Clear
+            <Trash2 size={14} aria-hidden="true" /> Clear
           </button>
         )}
       </div>
 
-      <div className="chat-history-container">
+      <div
+        className="chat-history-container"
+        role="log"
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="Chat messages"
+      >
         {messages.length === 0 ? (
           <div className="chat-empty-state">
-            <Sparkles size={28} className="empty-sparkle-icon" />
+            <Sparkles size={28} className="empty-sparkle-icon" aria-hidden="true" />
             <p className="empty-title">Ask questions about the uploaded PDF</p>
             <p className="empty-sub">Answers are strictly grounded in document content with direct page references.</p>
 
             {!isDisabled && (
-              <div className="suggested-questions">
+              <div className="suggested-questions" aria-label="Sample questions to try">
                 <span className="suggested-label">Sample queries to try:</span>
                 {sampleQuestions.map((q, idx) => (
                   <button
                     key={idx}
                     className="chip-suggestion"
                     onClick={() => onSendMessage(q)}
+                    aria-label={`Ask: ${q}`}
                   >
-                    "{q}"
+                    &quot;{q}&quot;
                   </button>
                 ))}
               </div>
@@ -88,7 +95,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className={`chat-bubble-row ${msg.sender === 'user' ? 'user-row' : 'ai-row'}`}>
-              <div className="avatar">
+              <div className="avatar" aria-hidden="true">
                 {msg.sender === 'user' ? <User size={14} /> : <Bot size={14} />}
               </div>
               <div className="message-content">
@@ -99,16 +106,16 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                 <div className="message-body">{msg.text}</div>
 
                 {msg.sources && msg.sources.length > 0 && (
-                  <div className="chat-sources-group">
+                  <div className="chat-sources-group" aria-label="Source references">
                     <span className="sources-label">Sources:</span>
                     {msg.sources.map((src, sIdx) => (
                       <button
                         key={sIdx}
                         className="btn-source-tag"
                         onClick={() => onNavigateToPage(src.page, src.snippet)}
-                        title={`Click to jump to Page ${src.page} in PDF`}
+                        aria-label={`Jump to page ${src.page}${src.section ? `, ${src.section}` : ''} in PDF viewer`}
                       >
-                        <Bookmark size={12} />
+                        <Bookmark size={12} aria-hidden="true" />
                         <span>Page {src.page}{src.section ? ` • ${src.section}` : ''}</span>
                         <span className="view-link">View source</span>
                       </button>
@@ -121,7 +128,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
         )}
 
         {isLoading && (
-          <div className="chat-bubble-row ai-row loading-row">
+          <div className="chat-bubble-row ai-row loading-row" role="status" aria-live="polite">
             <div className="avatar"><Bot size={14} /></div>
             <div className="message-content">
               <div className="ai-typing-indicator">
@@ -131,25 +138,29 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} aria-hidden="true" />
       </div>
 
-      <form onSubmit={handleSubmit} className="chat-input-form">
+      <form onSubmit={handleSubmit} className="chat-input-form" aria-label="Ask a question about the document">
+        <label htmlFor="chat-question-input" className="sr-only">Your question</label>
         <input
+          id="chat-question-input"
           type="text"
           value={inputQuestion}
           onChange={(e) => setInputQuestion(e.target.value)}
           placeholder="Anything particular to check in the document?"
           disabled={isDisabled || isLoading}
           className="chat-text-input"
+          aria-label="Type your question about the document"
+          maxLength={1000}
         />
         <button
           type="submit"
           disabled={isDisabled || isLoading || !inputQuestion.trim()}
           className="btn-send-chat"
-          title="Send Question"
+          aria-label="Send question"
         >
-          <Send size={16} />
+          <Send size={16} aria-hidden="true" />
         </button>
       </form>
     </div>

@@ -18,14 +18,14 @@ export const FindingCard: React.FC<FindingCardProps> = ({
       case 'risk':
         return {
           label: 'Concern / Risk',
-          icon: <ShieldAlert size={13} />,
+          icon: <ShieldAlert size={13} aria-hidden="true" />,
           badgeClass: 'badge-risk',
           cardClass: 'card-risk',
         };
       case 'favorable':
         return {
           label: 'Favorable Point',
-          icon: <CheckCircle2 size={13} />,
+          icon: <CheckCircle2 size={13} aria-hidden="true" />,
           badgeClass: 'badge-favorable',
           cardClass: 'card-favorable',
         };
@@ -33,7 +33,7 @@ export const FindingCard: React.FC<FindingCardProps> = ({
       default:
         return {
           label: 'Important Clause',
-          icon: <FileText size={13} />,
+          icon: <FileText size={13} aria-hidden="true" />,
           badgeClass: 'badge-important',
           cardClass: 'card-important',
         };
@@ -42,20 +42,32 @@ export const FindingCard: React.FC<FindingCardProps> = ({
 
   const config = getCategoryConfig(finding.type);
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect(finding);
+    }
+  };
+
   return (
     <div
       className={`finding-card ${config.cardClass} ${isActive ? 'active' : ''}`}
       onClick={() => onSelect(finding)}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      aria-label={`${config.label}: ${finding.title}, page ${finding.page}${finding.section ? `, ${finding.section}` : ''}`}
     >
       <div className="card-top-row">
-        <span className={`finding-type-badge ${config.badgeClass}`}>
+        <span className={`finding-type-badge ${config.badgeClass}`} aria-hidden="true">
           {config.icon}
           <span>{config.label}</span>
         </span>
-        <button className="source-location-tag" title="Click to navigate in PDF viewer">
+        <span className="source-location-tag" aria-hidden="true">
           <span>Page {finding.page}{finding.section ? ` • ${finding.section}` : ''}</span>
-          <ArrowRight size={13} className="arrow-icon" />
-        </button>
+          <ArrowRight size={13} className="arrow-icon" aria-hidden="true" />
+        </span>
       </div>
 
       <h4 className="finding-title">{finding.title}</h4>
@@ -69,7 +81,7 @@ export const FindingCard: React.FC<FindingCardProps> = ({
 
       {finding.source_text && (
         <blockquote className="source-quote-box">
-          <span className="quote-label">Excerpt:</span> "{finding.source_text}"
+          <span className="quote-label">Excerpt:</span> &quot;{finding.source_text}&quot;
         </blockquote>
       )}
     </div>
