@@ -1,0 +1,64 @@
+# ================================
+# Secrets & Environment Variables
+# ================================
+.env
+.env.local
+.env.*.local
+*.secret
+secrets/
+
+# ================================
+# Python
+# ================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# ================================
+# Testing & Coverage
+# ================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.log
+
+# ================================
+# Frontend (Node / Vite)
+# ================================
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# ================================
+# Editor / OS
+# ================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ================================
+# Sample / test documents
+# ================================
+# Uncomment if you don't want test docs in git:
+# test_docs/
+# backend/sample_docs/
